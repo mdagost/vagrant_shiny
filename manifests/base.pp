@@ -26,6 +26,13 @@ class emacs {
   }
 }
 
+class psql {
+  package { ["postgresql-client-common", "postgresql-client-9.1"]:
+    ensure => present,
+    require => Class['update_package_list'], 
+  }
+}
+
 class wget {
   package { "wget":
     ensure => present,
@@ -56,8 +63,8 @@ class update_package_list {
 }
 
 class r-base {
-  package { "r-base":
-    ensure => latest,
+  package { "r-base-core":
+    ensure => "3.0.0-2precise",
     require => Class['add_repos', 'update_package_list'], 
   }
 }
@@ -74,6 +81,7 @@ class shiny {
   exec { 'shiny package':
     command => "/usr/bin/R -e \"install.packages('shiny', repos='http://cran.rstudio.com/')\"",
     require => Class['r-base'], 
+    timeout => 600,
   }
   exec { 'shiny server':
     command => "/usr/bin/npm install -g shiny-server",
@@ -114,6 +122,7 @@ class start_shiny {
 include apache
 include emacs
 include wget
+include psql
 include add_repos
 include update_package_list
 include r-base
