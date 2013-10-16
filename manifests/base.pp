@@ -27,7 +27,7 @@ class emacs {
 }
 
 class psql {
-  package { ["postgresql-client-common", "postgresql-client-9.1"]:
+  package { ["postgresql-client-common", "postgresql-client-9.1", "libpq-dev", "postgresql-9.1"]:
     ensure => present,
     require => Class['update_package_list'], 
   }
