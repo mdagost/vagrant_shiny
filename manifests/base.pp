@@ -20,7 +20,7 @@ class apache {
 }
 
 class emacs {
-  package { "emacs":
+  package { ["emacs", "ess"]:
     ensure => present,
     require => Class['update_package_list'], 
   }
@@ -67,6 +67,19 @@ class r-base {
     ensure => "3.0.0-2precise",
     require => Class['add_repos', 'update_package_list'], 
   }
+}
+
+class r-packages {
+  $R_packages = ["ggplot2", "lubridate", "RPostgreSQL"]	
+
+  define r_package {
+    exec { "Installing R package $title":
+    command => "/usr/bin/R -e \"install.packages('${title}', repos='http://cran.rstudio.com/')\"",
+    require => Class['r-base'],		
+    }
+  }
+
+  r_package { $R_packages: }
 }
 
 class nodejs {
@@ -126,6 +139,7 @@ include psql
 include add_repos
 include update_package_list
 include r-base
+include r-packages
 include stdlib
 include nodejs
 include shiny

@@ -31,11 +31,12 @@ Vagrant::Config.run do |config|
   # computers to access the VM, whereas host only networking does not.
   config.vm.forward_port 80, 8080
   config.vm.forward_port 3838, 3838
+  config.vm.forward_port 8100, 8100
 
   # Share an additional folder to the guest VM. The first argument is
   # an identifier, the second is the path on the guest to mount the
   # folder, and the third is the path on the host to the actual folder.
-  #config.vm.share_folder "v-data", "/var/shiny-server/www/mydir", "./mydir"
+  config.vm.share_folder "v-data", "/var/shiny-server/www/mydir", "./mydir"
 
   # Enable provisioning with Puppet stand alone.  Puppet manifests
   # are contained in a directory path relative to this Vagrantfile.
