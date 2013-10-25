@@ -27,10 +27,37 @@ class emacs {
 }
 
 class psql {
-  package { ["postgresql-client-common", "postgresql-client-9.1", "libpq-dev", "postgresql-9.1"]:
-    ensure => present,
-    require => Class['update_package_list'], 
+
+  package { "libpq5":
+    ensure => "9.1.9-1~bpo60+1",
+    require => Class['update_package_list'],
   }
+
+  package { "libpq-dev":
+    ensure => "9.1.9-1~bpo60+1",
+    require => [Class['update_package_list'], Package['libpq5']], 
+  }
+
+  package { "postgresql-client-common":
+    ensure => "134wheezy3~bpo60+1",	
+    require => Class['update_package_list'],
+  }
+
+  package { "postgresql-client-9.1":
+    ensure => "9.1.9-1~bpo60+1",	
+    require => [ Class['update_package_list'], Package['postgresql-client-common'] ],
+  }
+
+  package { "postgresql-common":
+    ensure => "134wheezy3~bpo60+1",	
+    require => Class['update_package_list'],
+  }
+
+  package { "postgresql-9.1":
+    ensure => "9.1.9-1~bpo60+1",	
+    require => [ Class['update_package_list'], Package['postgresql-common'] ],
+  }
+
 }
 
 class wget {
@@ -41,18 +68,19 @@ class wget {
 }
 
 class add_repos {
-  file_line { '/etc/apt/sources.list':
+  file_line { '/etc/apt/sources.list backports':
     path => '/etc/apt/sources.list',
-    line => 'deb http://cran.rstudio.com/bin/linux/ubuntu precise/',
+    line => 'deb http://debian.cs.binghamton.edu/debian-backports squeeze-backports main',
+  }
+
+  file_line { '/etc/apt/sources.list cran':
+    path => '/etc/apt/sources.list',
+    line => 'deb http://cran.rstudio.com/bin/linux/debian squeeze-cran3/',
   }
 
   exec { 'add-cran-key':
-    command => '/usr/bin/apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 51716619E084DAB9'
-  } 	    
-
-  exec { 'add-apt-repository ppa:chris-lea/node.js':
-    command => '/usr/bin/add-apt-repository ppa:chris-lea/node.js'
-  }
+    command => '/usr/bin/apt-key adv --keyserver subkeys.pgp.net --recv-key 381BA480'
+  }  
 }
 
 class update_package_list {
@@ -64,7 +92,7 @@ class update_package_list {
 
 class r-base {
   package { "r-base-core":
-    ensure => "3.0.0-2precise",
+    ensure => "3.0.2-1~squeezecran3.0",
     require => Class['add_repos', 'update_package_list'], 
   }
 }
@@ -83,11 +111,50 @@ class r-packages {
 }
 
 class nodejs {
-  $node_packages = ["python-software-properties", "python", "g++", "make", "nodejs"]
+  $node_packages = ["python", "g++", "curl", "libssl-dev", "make"]
   package { $node_packages:
     ensure => present,
-    require => Class['add_repos', 'update_package_list'], 
-  } 
+    require => Class['add_repos', 'update_package_list', 'wget'], 
+  }
+
+  file { "/tmp/nodejs/":
+    mode => 777,
+    ensure => "directory",
+  }
+  
+  exec { "Download node":
+    command => "/usr/bin/wget http://nodejs.org/dist/node-latest.tar.gz",
+    cwd     => "/tmp/",
+    creates => "/tmp/node-latest.tar.gz",
+    require => File['/tmp/nodejs/'],
+  }
+
+  exec { "Prepare node":
+    command => "/bin/tar xzf /tmp/node-latest.tar.gz --directory=nodejs --strip-components=1",
+    cwd     => "/tmp/",
+    creates => "/tmp/nodejs/configure",
+    require => Exec["Download node"],
+  }
+
+  exec { "Configure node":
+    command => "/tmp/nodejs/configure --prefix=/usr/",
+    cwd     => "/tmp/nodejs/",
+    require => Exec["Prepare node"],
+  }
+
+  exec { "Build node":
+    command => "/usr/bin/make -C /tmp/nodejs",
+    cwd     => "/tmp/nodejs",
+    creates => "/tmp/nodejs/out/Release/node",
+    require => [ Exec["Configure node"], Package[$node_packages] ],
+  }
+
+  exec { "Install node":
+    command => "/usr/bin/make -C /tmp/nodejs install",
+    cwd     => "/tmp/",
+    creates => "/usr/local/bin/node",
+    require => Exec["Build node"],
+  }
 }
 
 class shiny {
@@ -98,6 +165,7 @@ class shiny {
   }
   exec { 'shiny server':
     command => "/usr/bin/npm install -g shiny-server",
+    environment => [ "HOME=/home/vagrant/" ],
     require => Class['nodejs'],
   }
   $dirs = ["/var/shiny-server", "/var/shiny-server/www", "/var/shiny-server/log"]
@@ -109,12 +177,17 @@ class shiny {
   }
 }
 
-class shiny_upstart {
+class shiny_initd {
   exec { 'wget':
-    command => "/usr/bin/wget http://raw.github.com/rstudio/shiny-server/master/config/upstart/shiny-server.conf -O /etc/init/shiny-server.conf",
-    creates  =>  "/etc/init/shiny-server.conf",
+    command => "/usr/bin/wget https://gist.github.com/mdagost/7155924/raw/d152e653f0e8be357394dfa6aeb67efeeac427bc/shiny-server -O /etc/init.d/shiny-server",
+    creates  =>  "/etc/init.d/shiny-server",
     require => Class["shiny", "wget"],
   }      
+
+  file { '/etc/init.d/shiny-server':
+    ensure => present,
+     mode => 777,  
+  }
 }
 
 class copy_shiny_examples {
@@ -127,8 +200,7 @@ class copy_shiny_examples {
 class start_shiny {
   service { "shiny-server":
     ensure => running,
-    provider => "upstart",
-    require => Class["shiny", "shiny_upstart"],
+    require => Class["shiny", "shiny_initd"],
   }
 }
 
@@ -143,6 +215,6 @@ include r-packages
 include stdlib
 include nodejs
 include shiny
-include shiny_upstart
+include shiny_initd
 include copy_shiny_examples
 include start_shiny
